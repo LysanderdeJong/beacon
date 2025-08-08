@@ -1,0 +1,90 @@
+title: "Beacon Dashboard"
+favicon: "📡"
+background:
+  type: "gradient"
+  value: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+  blur: 0
+theme:
+  default: "auto"
+  allowToggle: true
+ui:
+  showDescriptions: true
+
+groups:
+  - id: "infrastructure"
+    title: "Infrastructure"
+  - id: "applications"
+    title: "Applications"
+  - id: "monitoring"
+    title: "Monitoring & Observability"
+
+services:
+  - id: "google"
+    name: "Google"
+    group: "infrastructure"
+    url: "https://google.com"
+    icon: "🌐"
+    description: "Internet connectivity test"
+    health:
+      endpoint: "https://google.com"
+      expected_status: 200
+      interval: 30s
+      timeout: 5s
+      follow_redirects: true
+      retries: 2
+
+  - id: "github"
+    name: "GitHub"
+    group: "infrastructure"
+    url: "https://github.com"
+    icon: "🐙"
+    description: "Code repository and CI/CD"
+    health:
+      endpoint: "https://github.com"
+      expected_status: 200
+      interval: 60s
+      timeout: 10s
+      follow_redirects: true
+      retries: 1
+
+  - id: "httpbin"
+    name: "HTTPBin API"
+    group: "applications"
+    url: "https://httpbin.org"
+    icon: "🔌"
+    description: "HTTP testing service"
+    health:
+      endpoint: "https://httpbin.org/status/200"
+      expected_status: 200
+      interval: 15s
+      timeout: 5s
+      follow_redirects: true
+      retries: 3
+
+  - id: "jsonplaceholder"
+    name: "JSONPlaceholder"
+    group: "applications"
+    url: "https://jsonplaceholder.typicode.com"
+    icon: "📋"
+    description: "Fake REST API for testing"
+    health:
+      endpoint: "https://jsonplaceholder.typicode.com/posts/1"
+      expected_status: 200
+      interval: 45s
+      timeout: 8s
+      follow_redirects: true
+      retries: 2
+
+  - id: "example-down"
+    name: "Example Down Service"
+    group: "monitoring"
+    url: "https://httpbin.org/status/500"
+    icon: "❌"
+    description: "Intentionally failing service for demo"
+    health:
+      endpoint: "https://httpbin.org/status/500"
+      expected_status: 200
+      interval: 20s
+      timeout: 5s
+      follow_redirects: true
+      retries: 1
