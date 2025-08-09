@@ -107,8 +107,8 @@ func main() {
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", f.bind, f.port),
 		Handler:      server,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		ReadTimeout:  0, // Disable read timeout for SSE connections
+		WriteTimeout: 0, // Disable write timeout for SSE connections
 		IdleTimeout:  120 * time.Second,
 	}
 

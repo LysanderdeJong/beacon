@@ -205,19 +205,20 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			}
 			flusher.Flush()
 
-		   case <-keepalive.C:
-			   // Send keepalive as a real SSE event
-			   keepaliveEvent := store.SSEEvent{
-				   Type: "keepalive",
-				   Data: map[string]interface{}{
-					   "timestamp": time.Now().UTC(),
-				   },
-			   }
-			   if err := s.writeSSEEvent(w, keepaliveEvent); err != nil {
-				   log.Printf("Error writing keepalive event: %v", err)
-				   return
-			   }
-			   flusher.Flush()
+		case <-keepalive.C:
+			// Send keepalive as a real SSE event
+			log.Printf("Sending keepalive event to client %s", clientID)
+			keepaliveEvent := store.SSEEvent{
+				Type: "keepalive",
+				Data: map[string]interface{}{
+					"timestamp": time.Now().UTC(),
+				},
+			}
+			if err := s.writeSSEEvent(w, keepaliveEvent); err != nil {
+				log.Printf("Error writing keepalive event: %v", err)
+				return
+			}
+			flusher.Flush()
 
 		case <-r.Context().Done():
 			return // Client disconnected
