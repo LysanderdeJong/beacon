@@ -13,59 +13,59 @@ import (
 
 // Config represents the main configuration structure
 type Config struct {
-	Title      string     `yaml:"title"`
-	Favicon    string     `yaml:"favicon"`
-	Background Background `yaml:"background"`
-	Theme      Theme      `yaml:"theme"`
-	UI         UI         `yaml:"ui"`
-	Groups     []Group    `yaml:"groups"`
-	Services   []Service  `yaml:"services"`
+	Title      string     `yaml:"title" json:"title"`
+	Favicon    string     `yaml:"favicon" json:"favicon"`
+	Background Background `yaml:"background" json:"background"`
+	Theme      Theme      `yaml:"theme" json:"theme"`
+	UI         UI         `yaml:"ui" json:"ui"`
+	Groups     []Group    `yaml:"groups" json:"groups"`
+	Services   []Service  `yaml:"services" json:"services"`
 }
 
 // Background configuration for the dashboard
 type Background struct {
-	Type  string `yaml:"type"`  // "solid" | "gradient" | "image"
-	Value string `yaml:"value"` // CSS value or URL
-	Blur  int    `yaml:"blur"`  // px blur for background overlay
+	Type  string `yaml:"type" json:"type"`   // "solid" | "gradient" | "image"
+	Value string `yaml:"value" json:"value"` // CSS value or URL
+	Blur  int    `yaml:"blur" json:"blur"`   // px blur for background overlay
 }
 
 // Theme configuration
 type Theme struct {
-	Default     string `yaml:"default"` // "light" | "dark" | "auto"
-	AllowToggle bool   `yaml:"allowToggle"`
+	Default     string `yaml:"default" json:"default"` // "light" | "dark" | "auto"
+	AllowToggle bool   `yaml:"allowToggle" json:"allowToggle"`
 }
 
 // UI configuration
 type UI struct {
-	ShowDescriptions bool `yaml:"showDescriptions"`
+	ShowDescriptions bool `yaml:"showDescriptions" json:"showDescriptions"`
 }
 
 // Group represents a service group
 type Group struct {
-	ID    string `yaml:"id"`
-	Title string `yaml:"title"`
+	ID    string `yaml:"id" json:"id"`
+	Title string `yaml:"title" json:"title"`
 }
 
 // Service represents a monitored service
 type Service struct {
-	ID          string     `yaml:"id"`
-	Name        string     `yaml:"name"`
-	Group       string     `yaml:"group"`
-	URL         string     `yaml:"url"`
-	Icon        string     `yaml:"icon"`
-	Description string     `yaml:"description"`
-	Health      HealthSpec `yaml:"health"`
+	ID          string     `yaml:"id" json:"id"`
+	Name        string     `yaml:"name" json:"name"`
+	Group       string     `yaml:"group" json:"group"`
+	URL         string     `yaml:"url" json:"url"`
+	Icon        string     `yaml:"icon" json:"icon"`
+	Description string     `yaml:"description" json:"description"`
+	Health      HealthSpec `yaml:"health" json:"health"`
 }
 
 // HealthSpec defines health check configuration
 type HealthSpec struct {
-	Endpoint        string            `yaml:"endpoint"`
-	ExpectedStatus  int               `yaml:"expected_status"`
-	Interval        time.Duration     `yaml:"interval"`
-	Timeout         time.Duration     `yaml:"timeout"`
-	FollowRedirects bool              `yaml:"follow_redirects"`
-	Retries         int               `yaml:"retries"`
-	Headers         map[string]string `yaml:"headers"`
+	Endpoint        string            `yaml:"endpoint" json:"endpoint"`
+	ExpectedStatus  int               `yaml:"expected_status" json:"expected_status"`
+	Interval        time.Duration     `yaml:"interval" json:"interval"`
+	Timeout         time.Duration     `yaml:"timeout" json:"timeout"`
+	FollowRedirects bool              `yaml:"follow_redirects" json:"follow_redirects"`
+	Retries         int               `yaml:"retries" json:"retries"`
+	Headers         map[string]string `yaml:"headers" json:"headers"`
 }
 
 // LoadConfig loads configuration from a YAML file

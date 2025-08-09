@@ -76,6 +76,7 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	log.Printf("DEBUG: handleGetConfig config: %+v", s.config)
 	if err := json.NewEncoder(w).Encode(s.config); err != nil {
 		log.Printf("Error encoding config: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -204,12 +205,19 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			}
 			flusher.Flush()
 
-		case <-keepalive.C:
-			// Send keepalive comment
-			if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
-				return
-			}
-			flusher.Flush()
+		   case <-keepalive.C:
+			   // Send keepalive as a real SSE event
+			   keepaliveEvent := store.SSEEvent{
+				   Type: "keepalive",
+				   Data: map[string]interface{}{
+					   "timestamp": time.Now().UTC(),
+				   },
+			   }
+			   if err := s.writeSSEEvent(w, keepaliveEvent); err != nil {
+				   log.Printf("Error writing keepalive event: %v", err)
+				   return
+			   }
+			   flusher.Flush()
 
 		case <-r.Context().Done():
 			return // Client disconnected

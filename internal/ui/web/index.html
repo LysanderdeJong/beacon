@@ -240,6 +240,8 @@
                 loading: true,
                 error: null,
                 connected: false,
+                reconnecting: false,
+                reconnectAttempts: 0,
                 theme: 'auto',
                 eventSource: null,
 
@@ -265,15 +267,29 @@
                 },
 
                 connectSSE() {
-                    if (this.eventSource) {
-                        this.eventSource.close();
+                    // Prevent multiple simultaneous connection attempts
+                    if (this.reconnecting) {
+                        return;
                     }
 
+                    // Close existing connection if it exists
+                    if (this.eventSource) {
+                        // Only close if not already closed
+                        if (this.eventSource.readyState !== EventSource.CLOSED) {
+                            this.eventSource.close();
+                        }
+                        this.eventSource = null;
+                    }
+
+                    this.reconnecting = true;
                     this.eventSource = new EventSource('/sse/health');
                     
                     this.eventSource.onopen = () => {
                         this.connected = true;
                         this.error = null;
+                        this.reconnecting = false;
+                        this.reconnectAttempts = 0; // Reset backoff counter on successful connection
+                        console.log('SSE connection opened');
                     };
 
                     this.eventSource.onmessage = (event) => {
@@ -299,14 +315,31 @@
                         await this.loadConfig();
                     });
 
-                    this.eventSource.onerror = () => {
+                    this.eventSource.addEventListener('keepalive', (event) => {
+                        // Optionally log or process keepalive events
+                        console.log('SSE keepalive event received:', event.data);
+                    });
+
+                    this.eventSource.onerror = (event) => {
+                        console.log('SSE error occurred, readyState:', this.eventSource.readyState);
                         this.connected = false;
-                        // Reconnect after delay
-                        setTimeout(() => {
-                            if (!this.connected) {
-                                this.connectSSE();
-                            }
-                        }, 5000);
+                        this.reconnecting = false;
+                        
+                        // Only reconnect if the connection is actually closed
+                        // ReadyState 2 = CLOSED, which means we should reconnect
+                        if (this.eventSource.readyState === EventSource.CLOSED) {
+                            // Add exponential backoff for reconnection
+                            const delay = this.reconnectAttempts ? Math.min(30000, 1000 * Math.pow(2, this.reconnectAttempts)) : 1000;
+                            this.reconnectAttempts = (this.reconnectAttempts || 0) + 1;
+                            
+                            console.log(`SSE connection closed, reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+                            
+                            setTimeout(() => {
+                                if (!this.connected && this.eventSource && this.eventSource.readyState === EventSource.CLOSED) {
+                                    this.connectSSE();
+                                }
+                            }, delay);
+                        }
                     };
                 },
 
