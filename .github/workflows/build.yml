@@ -25,11 +25,11 @@ jobs:
         run: go mod download
       - name: Build (Windows)
         if: runner.os == 'Windows'
-        run: go build -v -o beacon.exe ./cmd/beacon
+        run: go build -v -ldflags "-s -w" -trimpath -o beacon.exe ./cmd/beacon
         shell: pwsh
       - name: Build (Linux/macOS)
         if: runner.os != 'Windows'
-        run: go build -v -o beacon ./cmd/beacon
+        run: go build -v -ldflags "-s -w" -trimpath -o beacon ./cmd/beacon
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
