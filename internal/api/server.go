@@ -94,7 +94,6 @@ func (s *Server) sseAwareMiddleware(next http.Handler) http.Handler {
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	// Method validation is handled by middleware
 	helper := middleware.NewResponseHelper(w)
-	log.Printf("DEBUG: handleGetConfig config: %+v", s.config)
 	helper.JSON(s.config)
 }
 
