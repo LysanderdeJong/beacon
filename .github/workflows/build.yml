@@ -34,7 +34,7 @@ jobs:
         run: go mod download
       - name: Build
         run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
+          if [ "$RUNNER_OS" = "Windows" ]; then
             go build -v -o beacon.exe ./cmd/beacon
           else
             go build -v -o beacon ./cmd/beacon
