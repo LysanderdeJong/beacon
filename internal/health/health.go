@@ -145,16 +145,21 @@ func (w *Worker) performCheck() {
 	}
 
 	startTime := time.Now()
-	status, httpStatus, err := w.checkService()
+	httpStatus, err := w.checkService()
 	responseTime := time.Since(startTime)
 
+	now := time.Now().UTC()
+	nextCheck := now.Add(w.service.Health.Interval)
+	responseTimeMs := responseTime.Milliseconds()
 	state := &store.ServiceState{
 		ID:             w.service.ID,
-		Status:         status,
-		LastChecked:    time.Now().UTC(),
-		ResponseTimeMs: responseTime.Milliseconds(),
+		Status:         w.determineStatus(httpStatus, responseTimeMs),
+		LastChecked:    now,
+		NextCheck:      nextCheck,
+		ResponseTimeMs: responseTimeMs,
 		HTTPStatus:     httpStatus,
 	}
+	// NOTE: You must add NextCheck time.Time to ServiceState struct in store/store.go and update all usages accordingly.
 
 	if err != nil {
 		state.Error = err.Error()
@@ -164,7 +169,7 @@ func (w *Worker) performCheck() {
 }
 
 // checkService performs the actual HTTP health check with retries
-func (w *Worker) checkService() (store.ServiceStatus, int, error) {
+func (w *Worker) checkService() (int, error) {
 	var lastErr error
 	var httpStatus int
 
@@ -175,26 +180,26 @@ func (w *Worker) checkService() (store.ServiceStatus, int, error) {
 			select {
 			case <-time.After(delay):
 			case <-w.ctx.Done():
-				return store.StatusDown, httpStatus, w.ctx.Err()
+				return httpStatus, w.ctx.Err()
 			}
 		}
 
-		status, code, err := w.performSingleCheck()
+		code, err := w.performSingleCheck()
 		httpStatus = code
 
 		if err == nil {
 			// Success - determine status based on response time and HTTP status
-			return w.determineStatus(status, code), code, nil
+			return httpStatus, nil
 		}
 
 		lastErr = err
 	}
 
-	return store.StatusDown, httpStatus, lastErr
+	return httpStatus, lastErr
 }
 
 // performSingleCheck performs a single HTTP request
-func (w *Worker) performSingleCheck() (store.ServiceStatus, int, error) {
+func (w *Worker) performSingleCheck() (int, error) {
 	ctx, cancel := context.WithTimeout(w.ctx, w.service.Health.Timeout)
 	defer cancel()
 
@@ -206,7 +211,7 @@ func (w *Worker) performSingleCheck() (store.ServiceStatus, int, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return store.StatusDown, 0, fmt.Errorf("failed to create request: %w", err)
+		return 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Add custom headers
@@ -230,15 +235,15 @@ func (w *Worker) performSingleCheck() (store.ServiceStatus, int, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return store.StatusDown, 0, fmt.Errorf("request failed: %w", err)
+		return 0, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	return store.StatusUp, resp.StatusCode, nil
+	return resp.StatusCode, nil
 }
 
-// determineStatus determines the service status based on HTTP response
-func (w *Worker) determineStatus(status store.ServiceStatus, httpStatus int) store.ServiceStatus {
+// determineStatus determines the service status based on HTTP response and response time
+func (w *Worker) determineStatus(httpStatus int, responseTimeMs int64) store.ServiceStatus {
 	// Default expected status to 200 if not configured
 	expectedStatus := w.service.Health.ExpectedStatus
 	if expectedStatus == 0 {
@@ -250,7 +255,14 @@ func (w *Worker) determineStatus(status store.ServiceStatus, httpStatus int) sto
 		return store.StatusDown
 	}
 
-	// TODO: Add logic for degraded status based on response time patterns
-	// For now, we consider it up if status matches
+	// Degraded threshold: 2x health timeout (in ms)
+	degradedThreshold := int64(w.service.Health.Timeout.Milliseconds()) * 2
+	if degradedThreshold == 0 {
+		degradedThreshold = 1000 // fallback default
+	}
+	if responseTimeMs > degradedThreshold {
+		return store.StatusDegraded
+	}
+
 	return store.StatusUp
 }

@@ -7,6 +7,7 @@
     <link rel="icon" x-bind:href="config.favicon || 'data:text/plain;base64,8J+UjA=='" type="image/x-icon">
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         [x-cloak] { display: none !important; }
         
@@ -98,6 +99,16 @@
 
     <!-- Main Content -->
     <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Search Bar -->
+        <div class="mb-6 flex justify-end">
+            <input
+                type="text"
+                x-model="searchQuery"
+                placeholder="Search services..."
+                class="w-full max-w-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+        </div>
+
         <!-- Loading State -->
         <div x-show="loading" class="flex items-center justify-center py-20">
             <div class="text-center">
@@ -137,9 +148,9 @@
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         <template x-for="service in getGroupServices(group.id)" :key="service.id">
-                            <div class="service-card bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md">
+                            <div class="service-card bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-colors" x-data="{ expanded: false }">
                                 <!-- Service Header -->
-                                <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center justify-between mb-3 cursor-pointer" @click="expanded = !expanded">
                                     <div class="flex items-center space-x-3">
                                         <!-- Service Icon -->
                                         <div class="flex-shrink-0">
@@ -163,21 +174,21 @@
                                     
                                     <!-- Status Indicator -->
                                     <div 
-                                        class="flex items-center space-x-2 px-2.5 py-1 rounded-full text-xs font-medium border"
+                                        class="flex items-center space-x-2 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
                                             x-bind:class="{
-                                                'bg-gray-100 text-gray-600 border-gray-200': service.status === 'unknown',
-                                                'bg-green-100 text-green-800 border-green-200': service.status === 'up',
-                                                'bg-red-100 text-red-800 border-red-200': service.status === 'down',
-                                                'bg-yellow-100 text-yellow-800 border-yellow-200': service.status === 'degraded'
+                                                'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700': service.status === 'unknown',
+                                                'bg-green-100 text-green-800 border-green-200 dark:bg-green-900 dark:text-green-200 dark:border-green-700': service.status === 'up',
+                                                'bg-red-100 text-red-800 border-red-200 dark:bg-red-900 dark:text-red-200 dark:border-red-700': service.status === 'down',
+                                                'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900 dark:text-yellow-200 dark:border-yellow-700': service.status === 'degraded'
                                             }"
                                     >
                                         <div 
-                                            class="w-1.5 h-1.5 rounded-full"
+                                            class="w-1.5 h-1.5 rounded-full pulse-dot transition-colors"
                                                 x-bind:class="{
-                                                    'bg-gray-400': service.status === 'unknown',
-                                                    'bg-green-500': service.status === 'up',
-                                                    'bg-red-500': service.status === 'down',
-                                                    'bg-yellow-500': service.status === 'degraded'
+                                                    'bg-gray-400 dark:bg-gray-500': service.status === 'unknown',
+                                                    'bg-green-500 dark:bg-green-400': service.status === 'up',
+                                                    'bg-red-500 dark:bg-red-400': service.status === 'down',
+                                                    'bg-yellow-500 dark:bg-yellow-400': service.status === 'degraded'
                                                 }"
                                         ></div>
                                         <span x-text="service.status.charAt(0).toUpperCase() + service.status.slice(1)"></span>
@@ -186,11 +197,65 @@
                                 
                                 <!-- Service Description -->
                                 <template x-if="config.ui?.showDescriptions !== false && getServiceConfig(service.id)?.description">
-                                    <p class="text-sm text-gray-600 dark:text-gray-300 mb-3" x-text="getServiceConfig(service.id).description"></p>
+                                    <p class="text-sm text-gray-600 dark:text-gray-300 mb-3 transition-colors" x-text="getServiceConfig(service.id).description"></p>
+                                </template>
+
+                                <!-- Expandable Response Time Graph -->
+                                <template x-if="expanded">
+                                    <div class="mt-3 mb-3 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <canvas :id="'rt-graph-' + service.id" class="w-full h-32"></canvas>
+                                        <script>
+                                            // Alpine.js nextTick to ensure canvas is rendered
+                                            $nextTick(() => {
+                                                if (!window.beaconResponseHistory) window.beaconResponseHistory = {};
+                                                if (!window.beaconResponseHistory[service.id]) window.beaconResponseHistory[service.id] = [];
+                                                // Add latest response time to history
+                                                const now = Date.now();
+                                                window.beaconResponseHistory[service.id].push({
+                                                    t: now,
+                                                    v: service.responseTimeMs
+                                                });
+                                                // Keep only last 6 hours
+                                                window.beaconResponseHistory[service.id] = window.beaconResponseHistory[service.id].filter(pt => pt.t > now - 21600000);
+                                                // Prepare data for Chart.js
+                                                const data = {
+                                                    labels: window.beaconResponseHistory[service.id].map(pt => new Date(pt.t).toLocaleTimeString()),
+                                                    datasets: [{
+                                                        label: 'Response Time (ms)',
+                                                        data: window.beaconResponseHistory[service.id].map(pt => pt.v),
+                                                        fill: false,
+                                                        borderColor: 'rgb(59, 130, 246)',
+                                                        backgroundColor: 'rgba(59,130,246,0.2)',
+                                                        tension: 0.1
+                                                    }]
+                                                };
+                                                const ctx = document.getElementById('rt-graph-' + service.id).getContext('2d');
+                                                if (ctx) {
+                                                    if (ctx._chartInstance) {
+                                                        ctx._chartInstance.destroy();
+                                                    }
+                                                    ctx._chartInstance = new Chart(ctx, {
+                                                        type: 'line',
+                                                        data,
+                                                        options: {
+                                                            responsive: true,
+                                                            plugins: {
+                                                                legend: { display: false },
+                                                            },
+                                                            scales: {
+                                                                x: { display: true, title: { display: false } },
+                                                                y: { display: true, title: { display: true, text: 'ms' }, beginAtZero: true }
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                            });
+                                        </script>
+                                    </div>
                                 </template>
                                 
                                 <!-- Service Metrics -->
-                                <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                                <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 transition-colors">
                                     <div class="flex items-center space-x-4">
                                         <template x-if="service.responseTimeMs > 0">
                                             <span x-text="`${service.responseTimeMs}ms`"></span>
@@ -206,7 +271,7 @@
                                 
                                 <!-- Service URL (clickable) -->
                                 <template x-if="getServiceConfig(service.id)?.url">
-                                    <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                    <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 transition-colors">
                                         <a 
                                             x-bind:href="getServiceConfig(service.id).url" 
                                             target="_blank" 
@@ -223,8 +288,8 @@
                                 
                                 <!-- Error Message -->
                                 <template x-if="service.error">
-                                    <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                                        <p class="text-xs text-red-600 dark:text-red-400" x-text="service.error"></p>
+                                    <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 transition-colors">
+                                        <p class="text-xs text-red-600 dark:text-red-400 transition-colors" x-text="service.error"></p>
                                     </div>
                                 </template>
                             </div>
@@ -247,12 +312,17 @@
                 reconnectAttempts: 0,
                 theme: 'auto',
                 eventSource: null,
+                now: Date.now(),
+                searchQuery: '',
 
                 async init() {
                     this.loadTheme();
                     this.applyTheme();
                     await this.loadConfig();
                     this.connectSSE();
+                    setInterval(() => {
+                        this.now = Date.now();
+                    }, 1000);
                 },
 
                 async loadConfig() {
@@ -361,16 +431,34 @@
                 getGroupServices(groupId) {
                     const configServices = this.config.services || [];
                     const groupServices = configServices.filter(s => (s.group || '') === groupId);
-                    
-                    return groupServices.map(configService => {
-                        const state = this.services[configService.id] || {
+
+                    // Filter by search query
+                    let filteredServices = groupServices;
+                    if (this.searchQuery && this.searchQuery.trim() !== '') {
+                        const q = this.searchQuery.trim().toLowerCase();
+                        filteredServices = groupServices.filter(s => {
+                            const name = (s.name || '').toLowerCase();
+                            const id = (s.id || '').toLowerCase();
+                            const desc = (s.description || '').toLowerCase();
+                            return name.includes(q) || id.includes(q) || desc.includes(q);
+                        });
+                    }
+
+                    const now = this.now;
+                    return filteredServices.map(configService => {
+                        let state = this.services[configService.id] || {
                             id: configService.id,
                             status: 'unknown',
                             lastChecked: null,
                             responseTimeMs: 0,
                             httpStatus: 0,
-                            error: null
+                            error: null,
+                            nextCheck: null
                         };
+                        // If nextCheck is set and now > nextCheck + 5000ms, mark status as unknown
+                        if (state.nextCheck && now > (new Date(state.nextCheck).getTime() + 5000)) {
+                            state = { ...state, status: 'unknown' };
+                        }
                         return state;
                     });
                 },
@@ -479,20 +567,6 @@
                     }
                 }
             }));
-        });
-    </script>
-    <script>
-        document.addEventListener('alpine:init', () => {
-            setInterval(() => {
-                // Find all timestamp spans in service cards
-                document.querySelectorAll('[x-text^="formatLastChecked("]').forEach(span => {
-                    // Find the closest Alpine component
-                    let $data = Alpine.closestData(span);
-                    if ($data && $data.formatLastChecked && $data.service && $data.service.lastChecked) {
-                        span.textContent = $data.formatLastChecked($data.service.lastChecked);
-                    }
-                });
-            }, 10000); // every 10 seconds
         });
     </script>
 </body>

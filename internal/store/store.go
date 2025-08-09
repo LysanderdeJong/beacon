@@ -25,6 +25,7 @@ type ServiceState struct {
 	ID             string        `json:"id"`
 	Status         ServiceStatus `json:"status"`
 	LastChecked    time.Time     `json:"lastChecked"`
+	NextCheck      time.Time     `json:"nextCheck"`
 	ResponseTimeMs int64         `json:"responseTimeMs"`
 	HTTPStatus     int           `json:"httpStatus"`
 	Error          string        `json:"error,omitempty"`
@@ -40,6 +41,7 @@ func (s *ServiceState) Copy() *ServiceState {
 		ID:             s.ID,
 		Status:         s.Status,
 		LastChecked:    s.LastChecked,
+		NextCheck:      s.NextCheck,
 		ResponseTimeMs: s.ResponseTimeMs,
 		HTTPStatus:     s.HTTPStatus,
 		Error:          s.Error,
