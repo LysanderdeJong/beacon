@@ -209,7 +209,7 @@
                                         </template>
                                     </div>
                                     <template x-if="service.lastChecked">
-                                        <span x-text="formatLastChecked(service.lastChecked)"></span>
+                                        <span x-text="formatLastChecked(service.lastChecked, now)"></span>
                                     </template>
                                 </div>
                                 
@@ -257,6 +257,7 @@
                 theme: 'auto',
                 eventSource: null,
                 now: Date.now(),
+                nowInterval: null,
                 searchQuery: '',
 
                 async init() {
@@ -264,9 +265,12 @@
                     this.applyTheme();
                     await this.loadConfig();
                     this.connectSSE();
-                    setInterval(() => {
-                        this.now = Date.now();
-                    }, 1000);
+                    // Ensure timer is started only once
+                    if (!this.nowInterval) {
+                        this.nowInterval = setInterval(() => {
+                            this.now = Date.now();
+                        }, 1000);
+                    }
                 },
 
                 async loadConfig() {
@@ -280,6 +284,14 @@
                     } catch (err) {
                         this.error = `Failed to load configuration: ${err.message}`;
                         this.loading = false;
+                    }
+                },
+
+                destroy() {
+                    // Properly clean up timer on component destroy
+                    if (this.nowInterval) {
+                        clearInterval(this.nowInterval);
+                        this.nowInterval = null;
                     }
                 },
 
@@ -422,10 +434,10 @@
                     }
                 },
 
-                formatLastChecked(timestamp) {
+                formatLastChecked(timestamp, nowValue) {
                     if (!timestamp) return '';
                     const date = new Date(timestamp);
-                    const now = new Date();
+                    const now = nowValue ? new Date(nowValue) : new Date();
                     const diff = now - date;
                     const seconds = Math.floor(diff / 1000);
                     const minutes = Math.floor(diff / 60000);
