@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/LysanderdeJong/beacon/internal/constants"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -74,7 +75,7 @@ func (w *Watcher) ErrorChan() <-chan error {
 func (w *Watcher) watchLoop() {
 	// Debounce rapid file changes (editors often write multiple times)
 	var debounceTimer *time.Timer
-	const debounceDelay = 100 * time.Millisecond
+	debounceDelay := constants.ConfigDebounceDelay
 
 	for {
 		select {
@@ -143,7 +144,7 @@ func (w *Watcher) isConfigFileEvent(event fsnotify.Event) bool {
 // reloadConfig attempts to reload the configuration file
 func (w *Watcher) reloadConfig() {
 	// Add a small delay to ensure file write is complete
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(constants.ConfigReloadDelay)
 
 	config, err := LoadConfig(w.configPath)
 	if err != nil {

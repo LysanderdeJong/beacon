@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/LysanderdeJong/beacon/internal/constants"
 )
 
 // ServiceStatus represents the current status of a service
@@ -26,6 +28,22 @@ type ServiceState struct {
 	ResponseTimeMs int64         `json:"responseTimeMs"`
 	HTTPStatus     int           `json:"httpStatus"`
 	Error          string        `json:"error,omitempty"`
+}
+
+// Copy creates a deep copy of the ServiceState to prevent concurrent access issues
+func (s *ServiceState) Copy() *ServiceState {
+	if s == nil {
+		return nil
+	}
+
+	return &ServiceState{
+		ID:             s.ID,
+		Status:         s.Status,
+		LastChecked:    s.LastChecked,
+		ResponseTimeMs: s.ResponseTimeMs,
+		HTTPStatus:     s.HTTPStatus,
+		Error:          s.Error,
+	}
 }
 
 // SSEEvent represents a Server-Sent Event
@@ -60,8 +78,7 @@ func (s *Store) GetServiceState(serviceID string) (*ServiceState, bool) {
 		return nil, false
 	}
 	// Return a copy to prevent concurrent access issues
-	stateCopy := *state
-	return &stateCopy, true
+	return state.Copy(), true
 }
 
 // GetAllServiceStates returns all current service states
@@ -72,8 +89,7 @@ func (s *Store) GetAllServiceStates() map[string]*ServiceState {
 	result := make(map[string]*ServiceState)
 	for id, state := range s.services {
 		// Return copies to prevent concurrent access issues
-		stateCopy := *state
-		result[id] = &stateCopy
+		result[id] = state.Copy()
 	}
 	return result
 }
@@ -111,7 +127,7 @@ func (s *Store) AddSSEClient() (string, chan SSEEvent) {
 
 	s.nextClient++
 	clientID := fmt.Sprintf("client_%d", s.nextClient)
-	eventChan := make(chan SSEEvent, 10) // Buffered channel to prevent blocking
+	eventChan := make(chan SSEEvent, constants.SSEEventChannelBuffer) // Buffered channel to prevent blocking
 	s.clients[clientID] = eventChan
 
 	return clientID, eventChan
@@ -130,14 +146,6 @@ func (s *Store) RemoveSSEClient(clientID string) {
 
 // BroadcastSnapshot sends the current state of all services to a specific client
 func (s *Store) BroadcastSnapshot(clientID string) {
-	s.clientsMu.RLock()
-	eventChan, exists := s.clients[clientID]
-	s.clientsMu.RUnlock()
-
-	if !exists {
-		return
-	}
-
 	allStates := s.GetAllServiceStates()
 	states := make([]*ServiceState, 0, len(allStates))
 	for _, state := range allStates {
@@ -151,8 +159,22 @@ func (s *Store) BroadcastSnapshot(clientID string) {
 		},
 	}
 
+	s.sendToClient(clientID, event)
+}
+
+// sendToClient sends an event to a specific client with proper error handling
+func (s *Store) sendToClient(clientID string, event SSEEvent) {
+	s.clientsMu.RLock()
+	eventChan, exists := s.clients[clientID]
+	s.clientsMu.RUnlock()
+
+	if !exists {
+		return
+	}
+
 	select {
 	case eventChan <- event:
+		// Successfully sent
 	default:
 		// Client channel is full, remove the client
 		s.RemoveSSEClient(clientID)
@@ -175,13 +197,25 @@ func (s *Store) broadcast(event SSEEvent) {
 	s.clientsMu.RLock()
 	defer s.clientsMu.RUnlock()
 
+	var clientsToRemove []string
+
 	for clientID, eventChan := range s.clients {
 		select {
 		case eventChan <- event:
+			// Successfully sent
 		default:
-			// Client channel is full, remove the client
-			go s.RemoveSSEClient(clientID)
+			// Client channel is full, mark for removal
+			clientsToRemove = append(clientsToRemove, clientID)
 		}
+	}
+
+	// Remove clients with full channels (done outside the loop to avoid deadlock)
+	if len(clientsToRemove) > 0 {
+		go func() {
+			for _, clientID := range clientsToRemove {
+				s.RemoveSSEClient(clientID)
+			}
+		}()
 	}
 }
 

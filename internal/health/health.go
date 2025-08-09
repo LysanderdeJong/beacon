@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/LysanderdeJong/beacon/internal/config"
+	"github.com/LysanderdeJong/beacon/internal/constants"
 	"github.com/LysanderdeJong/beacon/internal/store"
 )
 
@@ -43,7 +44,7 @@ func NewChecker(store *store.Store, maxConcurrent int) *Checker {
 		cancel:    cancel,
 		semaphore: make(chan struct{}, maxConcurrent),
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second, // Default timeout, will be overridden per request
+			Timeout: constants.DefaultHealthClientTimeout, // Default timeout, will be overridden per request
 		},
 	}
 }

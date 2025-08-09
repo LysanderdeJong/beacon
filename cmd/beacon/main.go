@@ -16,6 +16,7 @@ import (
 
 	"github.com/LysanderdeJong/beacon/internal/api"
 	"github.com/LysanderdeJong/beacon/internal/config"
+	"github.com/LysanderdeJong/beacon/internal/constants"
 	"github.com/LysanderdeJong/beacon/internal/health"
 	"github.com/LysanderdeJong/beacon/internal/store"
 	"github.com/LysanderdeJong/beacon/internal/ui"
@@ -103,13 +104,20 @@ func main() {
 		}()
 	}
 
-	// Create HTTP server
+	// Create HTTP server with SSE-optimized configuration using constants
+	// Based on best practices research: disable write timeout for SSE, but keep other security timeouts
 	httpServer := &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", f.bind, f.port),
-		Handler:      server,
-		ReadTimeout:  0, // Disable read timeout for SSE connections
-		WriteTimeout: 0, // Disable write timeout for SSE connections
-		IdleTimeout:  120 * time.Second,
+		Addr:    fmt.Sprintf("%s:%d", f.bind, f.port),
+		Handler: server,
+
+		// Sensible global timeouts for all routes using constants:
+		ReadTimeout:       constants.DefaultReadTimeout,       // Protect against slow clients
+		ReadHeaderTimeout: constants.DefaultReadHeaderTimeout, // Prevent slowloris attacks
+		WriteTimeout:      constants.DefaultWriteTimeout,      // Protect non-SSE routes from hanging
+		IdleTimeout:       constants.DefaultIdleTimeout,       // Keep-alive for better performance
+
+		// Enhanced error logging
+		ErrorLog: log.Default(),
 	}
 
 	// Setup graceful shutdown

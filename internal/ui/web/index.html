@@ -10,15 +10,8 @@
     <style>
         [x-cloak] { display: none !important; }
         
-        .status-unknown { @apply bg-gray-100 text-gray-600 border-gray-200; }
-        .status-up { @apply bg-green-100 text-green-800 border-green-200; }
-        .status-down { @apply bg-red-100 text-red-800 border-red-200; }
-        .status-degraded { @apply bg-yellow-100 text-yellow-800 border-yellow-200; }
         
-        .status-dot-unknown { @apply bg-gray-400; }
-        .status-dot-up { @apply bg-green-500; }
-        .status-dot-down { @apply bg-red-500; }
-        .status-dot-degraded { @apply bg-yellow-500; }
+        /* Removed custom status classes using @apply; use Tailwind utility classes directly in HTML */
         
         .service-card {
             transition: all 0.3s ease;
@@ -171,11 +164,21 @@
                                     <!-- Status Indicator -->
                                     <div 
                                         class="flex items-center space-x-2 px-2.5 py-1 rounded-full text-xs font-medium border"
-                                        x-bind:class="`status-${service.status}`"
+                                            x-bind:class="{
+                                                'bg-gray-100 text-gray-600 border-gray-200': service.status === 'unknown',
+                                                'bg-green-100 text-green-800 border-green-200': service.status === 'up',
+                                                'bg-red-100 text-red-800 border-red-200': service.status === 'down',
+                                                'bg-yellow-100 text-yellow-800 border-yellow-200': service.status === 'degraded'
+                                            }"
                                     >
                                         <div 
                                             class="w-1.5 h-1.5 rounded-full"
-                                            x-bind:class="`status-dot-${service.status}`"
+                                                x-bind:class="{
+                                                    'bg-gray-400': service.status === 'unknown',
+                                                    'bg-green-500': service.status === 'up',
+                                                    'bg-red-500': service.status === 'down',
+                                                    'bg-yellow-500': service.status === 'degraded'
+                                                }"
                                         ></div>
                                         <span x-text="service.status.charAt(0).toUpperCase() + service.status.slice(1)"></span>
                                     </div>
@@ -392,13 +395,28 @@
                     const date = new Date(timestamp);
                     const now = new Date();
                     const diff = now - date;
-                    
-                    if (diff < 60000) {
+                    const seconds = Math.floor(diff / 1000);
+                    const minutes = Math.floor(diff / 60000);
+                    const hours = Math.floor(diff / 3600000);
+                    const days = Math.floor(diff / 86400000);
+
+                    if (seconds < 10) {
                         return 'Just now';
-                    } else if (diff < 3600000) {
-                        return `${Math.floor(diff / 60000)}m ago`;
+                    } else if (seconds < 60) {
+                        return `${seconds}s ago`;
+                    } else if (minutes < 60) {
+                        return `${minutes}m ago`;
+                    } else if (hours < 24) {
+                        return `${hours}h ago`;
                     } else {
-                        return `${Math.floor(diff / 3600000)}h ago`;
+                        // Show date and time for older timestamps
+                        return date.toLocaleString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
                     }
                 },
 
@@ -461,6 +479,20 @@
                     }
                 }
             }));
+        });
+    </script>
+    <script>
+        document.addEventListener('alpine:init', () => {
+            setInterval(() => {
+                // Find all timestamp spans in service cards
+                document.querySelectorAll('[x-text^="formatLastChecked("]').forEach(span => {
+                    // Find the closest Alpine component
+                    let $data = Alpine.closestData(span);
+                    if ($data && $data.formatLastChecked && $data.service && $data.service.lastChecked) {
+                        span.textContent = $data.formatLastChecked($data.service.lastChecked);
+                    }
+                });
+            }, 10000); // every 10 seconds
         });
     </script>
 </body>

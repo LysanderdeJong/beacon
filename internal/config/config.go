@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/LysanderdeJong/beacon/internal/constants"
+	"github.com/LysanderdeJong/beacon/internal/validation"
 	"gopkg.in/yaml.v3"
 )
 
@@ -46,6 +48,9 @@ type Group struct {
 	Title string `yaml:"title" json:"title"`
 }
 
+// GetID implements validation.GroupIDProvider
+func (g Group) GetID() string { return g.ID }
+
 // Service represents a monitored service
 type Service struct {
 	ID          string     `yaml:"id" json:"id"`
@@ -56,6 +61,21 @@ type Service struct {
 	Description string     `yaml:"description" json:"description"`
 	Health      HealthSpec `yaml:"health" json:"health"`
 }
+
+// GetID implements validation.ServiceIDProvider
+func (s Service) GetID() string { return s.ID }
+
+// GetName implements validation.ServiceIDProvider
+func (s Service) GetName() string { return s.Name }
+
+// GetGroup implements validation.ServiceIDProvider
+func (s Service) GetGroup() string { return s.Group }
+
+// GetHealthInterval implements validation.ServiceIDProvider
+func (s Service) GetHealthInterval() time.Duration { return s.Health.Interval }
+
+// GetHealthTimeout implements validation.ServiceIDProvider
+func (s Service) GetHealthTimeout() time.Duration { return s.Health.Timeout }
 
 // HealthSpec defines health check configuration
 type HealthSpec struct {
@@ -102,31 +122,31 @@ func expandEnvVars(s string) string {
 // setDefaults sets default values for configuration
 func setDefaults(config *Config) {
 	if config.Title == "" {
-		config.Title = "Beacon"
+		config.Title = constants.DefaultAppTitle
 	}
 
 	if config.Theme.Default == "" {
-		config.Theme.Default = "auto"
+		config.Theme.Default = constants.DefaultTheme
 	}
 
 	if config.Background.Type == "" {
-		config.Background.Type = "solid"
-		config.Background.Value = "#f8fafc"
+		config.Background.Type = constants.DefaultBackgroundType
+		config.Background.Value = constants.DefaultBackgroundValue
 	}
 
 	for i := range config.Services {
 		service := &config.Services[i]
 		if service.Health.ExpectedStatus == 0 {
-			service.Health.ExpectedStatus = 200
+			service.Health.ExpectedStatus = constants.DefaultExpectedHTTPStatus
 		}
 		if service.Health.Interval == 0 {
-			service.Health.Interval = 30 * time.Second
+			service.Health.Interval = constants.DefaultHealthCheckInterval
 		}
 		if service.Health.Timeout == 0 {
-			service.Health.Timeout = 5 * time.Second
+			service.Health.Timeout = constants.DefaultHealthCheckTimeout
 		}
 		if service.Health.Retries == 0 {
-			service.Health.Retries = 1
+			service.Health.Retries = constants.DefaultHealthRetries
 		}
 		if service.Health.Headers == nil {
 			service.Health.Headers = make(map[string]string)
@@ -136,63 +156,38 @@ func setDefaults(config *Config) {
 
 // validateConfig validates the configuration structure
 func validateConfig(config *Config) error {
-	// Validate service IDs are unique
-	serviceIDs := make(map[string]bool)
+	// Validate services using the new validation helpers
+	if err := validation.ValidateServices(config.Services); err != nil {
+		return err
+	}
+
+	// Validate groups using the new validation helpers
+	if err := validation.ValidateGroups(config.Groups); err != nil {
+		return err
+	}
+
+	// Validate service group references
+	if err := validation.ValidateServiceGroupReferences(config.Services, config.Groups); err != nil {
+		return err
+	}
+
+	// Validate additional service fields not covered by generic validation
 	for _, service := range config.Services {
-		if service.ID == "" {
-			return fmt.Errorf("service ID cannot be empty")
-		}
-		if serviceIDs[service.ID] {
-			return fmt.Errorf("duplicate service ID: %s", service.ID)
-		}
-		serviceIDs[service.ID] = true
-
-		if service.Name == "" {
-			return fmt.Errorf("service name cannot be empty for service: %s", service.ID)
-		}
-
 		if service.Health.Endpoint == "" {
 			return fmt.Errorf("health endpoint cannot be empty for service: %s", service.ID)
-		}
-
-		if service.Health.Interval < time.Second {
-			return fmt.Errorf("health check interval too short for service %s: %v", service.ID, service.Health.Interval)
-		}
-
-		if service.Health.Timeout < time.Millisecond*100 {
-			return fmt.Errorf("health check timeout too short for service %s: %v", service.ID, service.Health.Timeout)
-		}
-	}
-
-	// Validate group IDs are unique
-	groupIDs := make(map[string]bool)
-	for _, group := range config.Groups {
-		if group.ID == "" {
-			return fmt.Errorf("group ID cannot be empty")
-		}
-		if groupIDs[group.ID] {
-			return fmt.Errorf("duplicate group ID: %s", group.ID)
-		}
-		groupIDs[group.ID] = true
-	}
-
-	// Validate service groups exist
-	for _, service := range config.Services {
-		if service.Group != "" && !groupIDs[service.Group] {
-			return fmt.Errorf("service %s references non-existent group: %s", service.ID, service.Group)
 		}
 	}
 
 	// Validate theme default value
 	validThemes := map[string]bool{"light": true, "dark": true, "auto": true}
-	if !validThemes[config.Theme.Default] {
-		return fmt.Errorf("invalid theme default: %s", config.Theme.Default)
+	if err := validation.ValidateFieldInSet(config.Theme.Default, validThemes, "theme default"); err != nil {
+		return err
 	}
 
 	// Validate background type
 	validBackgroundTypes := map[string]bool{"solid": true, "gradient": true, "image": true}
-	if !validBackgroundTypes[config.Background.Type] {
-		return fmt.Errorf("invalid background type: %s", config.Background.Type)
+	if err := validation.ValidateFieldInSet(config.Background.Type, validBackgroundTypes, "background type"); err != nil {
+		return err
 	}
 
 	return nil
